@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VLAN Config Generator</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f9f9f9;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h2 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 20px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 500px;
+      background: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    }
+
+    label {
+      margin-bottom: 5px;
+      display: block;
+      font-weight: 600;
+      color: #444;
+    }
+
+    input[type="text"],
+    textarea {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 15px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+
+    .checkbox-container {
+      display: flex;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+
+    .checkbox-container input[type="checkbox"] {
+      width: auto;
+      margin-right: 10px;
+    }
+
+    .buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    button {
+      padding: 12px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      font-size: 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    textarea {
+      font-family: monospace;
+      resize: vertical;
+      height: 250px;
+    }
+
+    @media (min-width: 600px) {
+      .buttons {
+        flex-direction: row;
+        justify-content: space-between;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>VLAN Config Generator</h2>
+
+    <label for="vlanInput">Enter VLAN(s) (e.g., 201-204 or 201,202):</label>
+    <input type="text" id="vlanInput" placeholder="201-204 or 201,202" autocomplete="off" />
+
+    <div class="checkbox-container">
+      <input type="checkbox" id="trunkMode" />
+      <label for="trunkMode">Trunk Mode</label>
+    </div>
+
+    <div class="buttons">
+      <button onclick="generateConfig()">Generate Config</button>
+      <button id="downloadButton" onclick="downloadConfig()">Download Config</button>
+      <button onclick="copyToClipboard()">Copy to Clipboard</button>
+    </div>
+
+    <textarea id="configOutput" readonly></textarea>
+  </div>
+
+  <script>
+    function parseInput(input) {
+      let values = [];
+      let parts = input.split(',');
+      for (let part of parts) {
+        part = part.trim();
+        if (part.includes('-')) {
+          let [startStr, endStr] = part.split('-');
+          let start = Number(startStr);
+          let end = Number(endStr);
+          if (
+            !Number.isInteger(start) || !Number.isInteger(end) ||
+            start < 1 || end < 1 || start > 4094 || end > 4094 || start > end
+          ) {
+            return null;
+          }
+          for (let i = start; i <= end; i++) {
+            values.push(i);
+          }
+        } else {
+          let val = Number(part);
+          if (!Number.isInteger(val) || val < 1 || val > 4094) {
+            return null;
+          }
+          values.push(val);
+        }
+      }
+      return values;
+    }
+
+    function generateConfig() {
+      const vlanInput = document.getElementById('vlanInput').value.trim();
+      if (!vlanInput) {
+        alert('Please enter VLAN(s).');
+        return;
+      }
+
+      const vlans = parseInput(vlanInput);
+      if (vlans === null || vlans.length === 0) {
+        alert('Error: All VLANs must be integers between 1 and 4094.');
+        return;
+      }
+
+      if (vlans.length > 16) {
+        alert('Error: Maximum 16 VLANs allowed.');
+        return;
+      }
+
+      const isTrunk = document.getElementById('trunkMode').checked;
+
+      let config = '';
+      for (let i = 0; i < vlans.length; i++) {
+        const port = i + 1;
+        config += `interface EPON0/${port}\n`;
+        if (isTrunk) config += ` switchport mode trunk\n`;
+        config += ` switchport pvid ${vlans[i]}\n!\n`;
+      }
+
+      const suggestedName = vlanInput.replace(/\s+/g, '').replace(/,/g, '-');
+      document.getElementById('configOutput').value = config;
+      document.getElementById('downloadButton').setAttribute('data-filename', `${suggestedName}_vlan_config.txt`);
+    }
+
+    function downloadConfig() {
+      const content = document.getElementById('configOutput').value;
+      const filename = document.getElementById('downloadButton').getAttribute('data-filename') || 'vlan_config.txt';
+      const blob = new Blob([content], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+    }
+
+    function copyToClipboard() {
+      const configText = document.getElementById('configOutput').value;
+      if (!configText) {
+        alert('Nothing to copy! Generate config first.');
+        return;
+      }
+      navigator.clipboard.writeText(configText).then(() => {
+        alert('Config copied to clipboard!');
+      }).catch(() => {
+        alert('Failed to copy. Please copy manually.');
+      });
+    }
+  </script>
+</body>
+</html>
